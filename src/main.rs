@@ -1,27 +1,26 @@
 use ggez::error::GameError;
-use ggez::{
-    event::{self, EventHandler, KeyCode},
-    graphics::{self, Color, DrawMode, DrawParam, Mesh},
-    Context, GameResult,
-};
+use ggez::graphics::{self, Color, DrawMode, DrawParam, Mesh, Text};
+use ggez::{event::{self, EventHandler, KeyCode}, Context, GameResult};
 use rand::{thread_rng, Rng};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 const WINDOW_WIDTH: f32 = 800.0;
 const WINDOW_HEIGHT: f32 = 600.0;
 const PLAYER_SIZE: f32 = 10.0;
-const ENEMY_SIZE: f32 = 12.0;
-const BULLET_WIDTH: f32 = 5.0;
-const BULLET_HEIGHT: f32 = 5.0;
-const BULLET_SPEED: f32 = 1.0;
+const ENEMY_SIZE: f32 = 10.0;
+const BULLET_SIZE: f32 = 5.0;
+const BULLET_SPEED: f32 = 0.5;
 const PLAYER_SPEED: f32 = 5.0;
-const ENEMY_SPEED: f32 = 1.0;
+const ENEMY_SPEED: f32 = 2.5;
 
 struct MainState {
     player_x: f32,
     player_y: f32,
     enemies: Vec<(f32, f32, Instant)>,
-    bullets: Vec<(f32, f32, f32)>,
+    bullets: Vec<(f32, f32)>,
+    score: i32,
+    level: i32,
+    player_lost: bool,
 }
 
 impl MainState {
@@ -31,6 +30,16 @@ impl MainState {
             player_y: WINDOW_HEIGHT / 2.0,
             enemies: vec![],
             bullets: vec![],
+            score: 0,
+            level: 1,
+            player_lost: false,
+        }
+    }
+
+    fn start_level(&mut self) {
+        self.enemies.clear();
+        for _ in 0..(10 * self.level) {
+            self.spawn_enemy();
         }
     }
 
@@ -60,16 +69,15 @@ impl MainState {
     }
 
     fn shoot(&mut self) {
-    self.bullets.push((
-        self.player_x + PLAYER_SIZE / 2.0 - BULLET_WIDTH / 2.0,
-        self.player_y + PLAYER_SIZE / 2.0 - BULLET_HEIGHT / 2.0,
-        WINDOW_WIDTH,
-    ));
-}
+        self.bullets.push((
+            self.player_x + PLAYER_SIZE / 2.0 - BULLET_SIZE / 2.0,
+            self.player_y + PLAYER_SIZE / 2.0 - BULLET_SIZE / 2.0,
+        ));
+    }
 
     fn update_bullets(&mut self) {
-        self.bullets.retain(|(x, _, _)| *x <= WINDOW_WIDTH);
-        for (x, _, _) in &mut self.bullets {
+        self.bullets.retain(|(x, _)| *x <= WINDOW_WIDTH);
+        for (x, y) in &mut self.bullets {
             *x += BULLET_SPEED;
         }
     }
@@ -77,9 +85,9 @@ impl MainState {
     fn detect_collisions(&mut self) {
         let mut bullets_to_remove = Vec::new();
         let mut enemies_to_remove = Vec::new();
-
+    
         for (bullet_idx, bullet) in self.bullets.iter().enumerate() {
-            let bullet_rect = graphics::Rect::new(bullet.0, bullet.1, BULLET_WIDTH, BULLET_HEIGHT);
+            let bullet_rect = graphics::Rect::new(bullet.0, bullet.1, BULLET_SIZE, BULLET_SIZE);
             for (enemy_idx, enemy) in self.enemies.iter().enumerate() {
                 let enemy_rect = graphics::Rect::new(enemy.0, enemy.1, ENEMY_SIZE, ENEMY_SIZE);
                 if bullet_rect.overlaps(&enemy_rect) {
@@ -88,49 +96,63 @@ impl MainState {
                 }
             }
         }
-
+    
+        // Remove enemies first
+        for idx in enemies_to_remove.into_iter().rev() {
+            if idx < self.enemies.len() {
+                self.enemies.remove(idx);
+                self.score += 1;
+            }
+        }
+    
+        // Remove bullets
         for idx in bullets_to_remove.into_iter().rev() {
             if idx < self.bullets.len() {
                 self.bullets.remove(idx);
             }
         }
-        for idx in enemies_to_remove.into_iter().rev() {
-            if idx < self.enemies.len() {
-                self.enemies.remove(idx);
-            }
-        }
     }
+    
 
     fn detect_player_enemy_collision(&self) -> bool {
         for enemy in &self.enemies {
             let enemy_rect = graphics::Rect::new(enemy.0, enemy.1, ENEMY_SIZE, ENEMY_SIZE);
-            let player_rect =
-                graphics::Rect::new(self.player_x, self.player_y, PLAYER_SIZE, PLAYER_SIZE);
+            let player_rect = graphics::Rect::new(self.player_x, self.player_y, PLAYER_SIZE, PLAYER_SIZE);
             if enemy_rect.overlaps(&player_rect) {
-                return true; // if collision true == i died x(
+                return true;
             }
         }
-        false // if no collision false == i am alive :)
+        false
     }
+
+    fn handle_loss(&mut self, ctx: &mut Context) {
+        self.player_lost = true;
+    }
+
 }
 
 impl EventHandler<GameError> for MainState {
-
     fn update(&mut self, ctx: &mut Context) -> GameResult {
         self.move_enemies();
         self.update_bullets();
         self.detect_collisions();
 
         if self.detect_player_enemy_collision() {
-            event::quit(ctx);
+            self.handle_loss(ctx);
         }
+
+        if self.enemies.is_empty() {
+            self.level += 1;
+            self.start_level();
+        }
+
 
         Ok(())
     }
-
+    
     fn draw(&mut self, ctx: &mut Context) -> GameResult {
         graphics::clear(ctx, Color::BLACK);
-
+    
         let player_mesh = Mesh::new_rectangle(
             ctx,
             DrawMode::fill(),
@@ -138,7 +160,7 @@ impl EventHandler<GameError> for MainState {
             Color::RED,
         )?;
         graphics::draw(ctx, &player_mesh, DrawParam::default())?;
-
+    
         for enemy in &self.enemies {
             let enemy_mesh = Mesh::new_rectangle(
                 ctx,
@@ -148,21 +170,54 @@ impl EventHandler<GameError> for MainState {
             )?;
             graphics::draw(ctx, &enemy_mesh, DrawParam::default())?;
         }
-
-        for (x, y, _) in &self.bullets {
+    
+        for (x, y) in &self.bullets {
             let bullet_mesh = Mesh::new_rectangle(
                 ctx,
                 DrawMode::fill(),
-                graphics::Rect::new(*x, *y, BULLET_WIDTH, BULLET_HEIGHT),
+                graphics::Rect::new(*x, *y, BULLET_SIZE, BULLET_SIZE),
                 Color::WHITE,
             )?;
             graphics::draw(ctx, &bullet_mesh, DrawParam::default())?;
         }
+    
+        let score_text = Text::new(format!("Score: {}", self.score));
+        let score_position = [
+            WINDOW_WIDTH / 2.0 - score_text.width(ctx) as f32 / 2.0, 
+            10.0
+        ];
+        graphics::draw(ctx, &score_text, (score_position, 0.0, Color::WHITE))?;
+        
+        let level_text = Text::new(format!("Level: {}", self.level));
+        let level_position = [
+            WINDOW_WIDTH / 2.0 - level_text.width(ctx) as f32 / 2.0, 
+            26.0
+        ];
+        graphics::draw(ctx, &level_text, (level_position, 0.0, Color::WHITE))?;
+        
+        if self.player_lost {
+            let lost_text = Text::new("You lost!");
+            let lost_position = [
+                WINDOW_WIDTH / 2.0 - lost_text.width(ctx) as f32 / 2.0, 
+                WINDOW_HEIGHT / 2.0,
+            ];
+            graphics::draw(ctx, &lost_text, (lost_position, 0.0, Color::WHITE))?;
 
+        }
+
+        if self.enemies.is_empty() {
+            let won_text = Text::new("You won!");
+            let won_position = [
+                WINDOW_WIDTH / 2.0 - won_text.width(ctx) as f32 / 2.0, 
+                WINDOW_HEIGHT / 2.0,
+            ];
+            graphics::draw(ctx, &won_text, (won_position, 0.0, Color::WHITE))?;
+        }
+    
         graphics::present(ctx)?;
         Ok(())
     }
-
+    
     fn key_down_event(
         &mut self,
         _ctx: &mut Context,
@@ -170,6 +225,10 @@ impl EventHandler<GameError> for MainState {
         _keymods: event::KeyMods,
         _repeat: bool,
     ) {
+        if self.player_lost {
+            return;
+        }
+
         match keycode {
             KeyCode::W => {
                 if self.player_y > 0.0 {
@@ -193,7 +252,6 @@ impl EventHandler<GameError> for MainState {
             }
             KeyCode::Space => {
                 self.shoot();
-                print!("Shooting!");
             }
             _ => {}
         }
@@ -201,7 +259,7 @@ impl EventHandler<GameError> for MainState {
 }
 
 fn main() -> GameResult {
-    let (ctx, event_loop) = ggez::ContextBuilder::new("my_game", "your_name")
+    let (ctx, event_loop) = ggez::ContextBuilder::new("my_game", "telmo-sousa")
         .window_setup(ggez::conf::WindowSetup::default().title("My Game"))
         .window_mode(ggez::conf::WindowMode::default().dimensions(WINDOW_WIDTH, WINDOW_HEIGHT))
         .build()?;
