@@ -21,6 +21,7 @@ struct MainState {
     score: i32,
     level: i32,
     player_lost: bool,
+    menu_active: bool,
 }
 
 impl MainState {
@@ -31,8 +32,9 @@ impl MainState {
             enemies: vec![],
             bullets: vec![],
             score: 0,
-            level: 1,
+            level: 0,
             player_lost: false,
+            menu_active: true,
         }
     }
 
@@ -129,10 +131,17 @@ impl MainState {
         self.player_lost = true;
     }
 
+    fn handle_menu(&mut self, ctx: &mut Context) {
+        self.menu_active = !self.menu_active;
+    }
 }
 
 impl EventHandler<GameError> for MainState {
     fn update(&mut self, ctx: &mut Context) -> GameResult {
+        if self.menu_active {
+            return Ok(());
+        }
+
         self.move_enemies();
         self.update_bullets();
         self.detect_collisions();
@@ -146,11 +155,31 @@ impl EventHandler<GameError> for MainState {
             self.start_level();
         }
 
-
         Ok(())
     }
     
     fn draw(&mut self, ctx: &mut Context) -> GameResult {
+        if self.menu_active {
+            graphics::clear(ctx, Color::BLACK);
+
+            let welcome_text = Text::new("game!");
+            let welcome_position = [
+                WINDOW_WIDTH / 2.0 - welcome_text.width(ctx) as f32 / 2.0, 
+                WINDOW_HEIGHT / 2.0 - 20.0,
+            ];
+            graphics::draw(ctx, &welcome_text, (welcome_position, 0.0, Color::WHITE))?;
+
+            let start_text = Text::new("press space");
+            let start_position = [
+                WINDOW_WIDTH / 2.0 - start_text.width(ctx) as f32 / 2.0, 
+                WINDOW_HEIGHT / 2.0 + 20.0,
+            ];
+            graphics::draw(ctx, &start_text, (start_position, 0.0, Color::WHITE))?;
+
+            graphics::present(ctx)?;
+            return Ok(());
+        }
+
         graphics::clear(ctx, Color::BLACK);
     
         let player_mesh = Mesh::new_rectangle(
@@ -196,13 +225,12 @@ impl EventHandler<GameError> for MainState {
         graphics::draw(ctx, &level_text, (level_position, 0.0, Color::WHITE))?;
         
         if self.player_lost {
-            let lost_text = Text::new("You lost!");
+            let lost_text = Text::new("you lost, press space");
             let lost_position = [
                 WINDOW_WIDTH / 2.0 - lost_text.width(ctx) as f32 / 2.0, 
                 WINDOW_HEIGHT / 2.0,
             ];
             graphics::draw(ctx, &lost_text, (lost_position, 0.0, Color::WHITE))?;
-
         }
 
         if self.enemies.is_empty() {
@@ -220,12 +248,27 @@ impl EventHandler<GameError> for MainState {
     
     fn key_down_event(
         &mut self,
-        _ctx: &mut Context,
+        ctx: &mut Context,
         keycode: KeyCode,
         _keymods: event::KeyMods,
         _repeat: bool,
     ) {
-        if self.player_lost {
+        if keycode == KeyCode::Space {
+            if self.menu_active {
+                self.handle_menu(ctx);
+            } else if self.player_lost || self.enemies.is_empty() {
+                self.player_x = WINDOW_WIDTH / 2.0;
+                self.player_y = WINDOW_HEIGHT / 2.0;
+                self.score = 0;
+                self.level = 1;
+                self.player_lost = false;
+                self.start_level();
+            } else {
+                self.shoot();
+            }
+        }
+
+        if self.player_lost || self.enemies.is_empty() {
             return;
         }
 
@@ -250,8 +293,8 @@ impl EventHandler<GameError> for MainState {
                     self.player_x += PLAYER_SPEED;
                 }
             }
-            KeyCode::Space => {
-                self.shoot();
+            KeyCode::Escape => {
+                self.handle_menu(ctx);
             }
             _ => {}
         }
@@ -263,9 +306,6 @@ fn main() -> GameResult {
         .window_setup(ggez::conf::WindowSetup::default().title("My Game"))
         .window_mode(ggez::conf::WindowMode::default().dimensions(WINDOW_WIDTH, WINDOW_HEIGHT))
         .build()?;
-    let mut state = MainState::new();
-    for _ in 0..10 {
-        state.spawn_enemy();
-    }
+    let state = MainState::new();
     event::run(ctx, event_loop, state)
 }
