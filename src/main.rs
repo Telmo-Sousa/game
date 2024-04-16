@@ -23,7 +23,7 @@ struct MainState {
     player_x: f32,
     player_y: f32,
     enemies: Vec<(f32, f32, Instant)>,
-    bullets: Vec<(f32, f32)>,
+    bullets: Vec<(f32, f32, f32, f32)>,
     coins: Vec<Coin>,
     score: i32,
     level: i32,
@@ -86,23 +86,40 @@ impl MainState {
         }
     }
 
-    fn shoot(&mut self) {
+    fn shoot(&mut self, dx: f32, dy: f32) {
         if self.bullets_limit > 0 && self.bullets_on_screen < 5 {
-            self.bullets.push((
-                self.player_x + PLAYER_SIZE / 2.0 - BULLET_SIZE / 2.0,
-                self.player_y + PLAYER_SIZE / 2.0 - BULLET_SIZE / 2.0,
-            ));
+            let bullet_x = self.player_x + PLAYER_SIZE / 2.0 - BULLET_SIZE / 2.0;
+            let bullet_y = self.player_y + PLAYER_SIZE / 2.0 - BULLET_SIZE / 2.0;
+            self.bullets.push((bullet_x, bullet_y, dx, dy));
             self.bullets_limit -= 1;
             self.bullets_on_screen += 1;
         }
     }
 
+    fn shoot_left(&mut self) {
+        self.shoot(-BULLET_SPEED, 0.0);
+    }
+
+    fn shoot_down(&mut self) {
+        self.shoot(0.0, BULLET_SPEED);
+    }
+
+    fn shoot_up(&mut self) {
+        self.shoot(0.0, -BULLET_SPEED);
+    }
+
+    fn shoot_right(&mut self) {
+        self.shoot(BULLET_SPEED, 0.0);
+    }
+
     fn update_bullets(&mut self) {
         let mut bullets_to_remove = Vec::new();
-        for (i, (x, _)) in self.bullets.iter().enumerate() {
-            if *x > WINDOW_WIDTH {
+        for (i, (x, y, dx, dy)) in self.bullets.iter_mut().enumerate() {
+            if *x > WINDOW_WIDTH || *x < 0.0 || *y > WINDOW_HEIGHT || *y < 0.0 {
                 bullets_to_remove.push(i);
             }
+            *x += *dx;
+            *y += *dy;
         }
         for idx in bullets_to_remove.into_iter().rev() {
             if idx < self.bullets.len() {
@@ -110,19 +127,17 @@ impl MainState {
                 self.bullets_on_screen -= 1;
             }
         }
-        for (x, y) in &mut self.bullets {
-            *x += BULLET_SPEED;
-        }
     }
 
     fn detect_collisions(&mut self) {
         let mut bullets_to_remove = Vec::new();
         let mut enemies_to_remove = Vec::new();
 
-        for (bullet_idx, bullet) in self.bullets.iter().enumerate() {
-            let bullet_rect = graphics::Rect::new(bullet.0, bullet.1, BULLET_SIZE, BULLET_SIZE);
-            for (enemy_idx, enemy) in self.enemies.iter().enumerate() {
-                let enemy_rect = graphics::Rect::new(enemy.0, enemy.1, ENEMY_SIZE, ENEMY_SIZE);
+        for (bullet_idx, (bullet_x, bullet_y, _, _)) in self.bullets.iter().enumerate() {
+            let bullet_rect = graphics::Rect::new(*bullet_x, *bullet_y, BULLET_SIZE, BULLET_SIZE);
+            for (enemy_idx, (enemy_x, enemy_y, _)) in self.enemies.iter().enumerate() {
+                let enemy_rect =
+                    graphics::Rect::new(*enemy_x, *enemy_y, ENEMY_SIZE, ENEMY_SIZE);
                 if bullet_rect.overlaps(&enemy_rect) {
                     bullets_to_remove.push(bullet_idx);
                     enemies_to_remove.push(enemy_idx);
@@ -148,8 +163,8 @@ impl MainState {
     }
 
     fn detect_player_enemy_collision(&self) -> bool {
-        for enemy in &self.enemies {
-            let enemy_rect = graphics::Rect::new(enemy.0, enemy.1, ENEMY_SIZE, ENEMY_SIZE);
+        for (enemy_x, enemy_y, _) in &self.enemies {
+            let enemy_rect = graphics::Rect::new(*enemy_x, *enemy_y, ENEMY_SIZE, ENEMY_SIZE);
             let player_rect =
                 graphics::Rect::new(self.player_x, self.player_y, PLAYER_SIZE, PLAYER_SIZE);
             if enemy_rect.overlaps(&player_rect) {
@@ -199,7 +214,7 @@ impl MainState {
             let player_rect =
                 graphics::Rect::new(self.player_x, self.player_y, PLAYER_SIZE, PLAYER_SIZE);
             if coin_rect.overlaps(&player_rect) {
-                self.score += 150;
+                self.score += 500;
                 coins_to_remove.push(i);
             }
         }
@@ -282,6 +297,20 @@ impl EventHandler<GameError> for MainState {
             ];
             graphics::draw(ctx, &start_text, (start_position, 0.0, Color::WHITE))?;
 
+            let shop_text_key1 = Text::new("Key 1 - 100 points for 20 more bullets");
+            let shop_text_key2 = Text::new("Key 2 - 100 points to remove 5 enemies");
+            let shop_text_key3 = Text::new("Key 3 - 100 points for a random score");
+            let shop_position_x = 10.0;
+            let shop_position_y = 40.0;
+
+            let key1_position = [shop_position_x, shop_position_y];
+            let key2_position = [shop_position_x, shop_position_y + 20.0];
+            let key3_position = [shop_position_x, shop_position_y + 40.0];
+
+            graphics::draw(ctx, &shop_text_key1, (key1_position, 0.0, Color::WHITE))?;
+            graphics::draw(ctx, &shop_text_key2, (key2_position, 0.0, Color::WHITE))?;
+            graphics::draw(ctx, &shop_text_key3, (key3_position, 0.0, Color::WHITE))?;
+
             graphics::present(ctx)?;
             return Ok(());
         }
@@ -306,7 +335,7 @@ impl EventHandler<GameError> for MainState {
             graphics::draw(ctx, &enemy_mesh, DrawParam::default())?;
         }
 
-        for (x, y) in &self.bullets {
+        for (x, y, _, _) in &self.bullets {
             let bullet_mesh = Mesh::new_rectangle(
                 ctx,
                 DrawMode::fill(),
@@ -325,20 +354,6 @@ impl EventHandler<GameError> for MainState {
             )?;
             graphics::draw(ctx, &coin_mesh, DrawParam::default())?;
         }
-
-        let shop_text_key1 = Text::new("Key 1 - 100 points for 20 more bullets");
-        let shop_text_key2 = Text::new("Key 2 - 100 points to remove 5 enemies");
-        let shop_text_key3 = Text::new("Key 3 - 100 points for a random score boost");
-        let shop_position_x = 10.0;
-        let shop_position_y = 40.0;
-
-        let key1_position = [shop_position_x, shop_position_y];
-        let key2_position = [shop_position_x, shop_position_y + 20.0];
-        let key3_position = [shop_position_x, shop_position_y + 40.0];
-
-        graphics::draw(ctx, &shop_text_key1, (key1_position, 0.0, Color::WHITE))?;
-        graphics::draw(ctx, &shop_text_key2, (key2_position, 0.0, Color::WHITE))?;
-        graphics::draw(ctx, &shop_text_key3, (key3_position, 0.0, Color::WHITE))?;
 
         let score_text = Text::new(format!("Score: {}", self.score));
         let score_position = [
@@ -390,22 +405,22 @@ impl EventHandler<GameError> for MainState {
         _keymods: event::KeyMods,
         _repeat: bool,
     ) {
-        if keycode == KeyCode::Space {
-            if self.menu_active {
+        if self.menu_active {
+            if keycode == KeyCode::Space {
                 self.handle_menu(ctx);
-            } else if self.player_lost || self.enemies.is_empty() {
+            }
+            return;
+        }
+
+        if self.player_lost || self.enemies.is_empty() {
+            if keycode == KeyCode::Space {
                 self.player_x = WINDOW_WIDTH / 2.0;
                 self.player_y = WINDOW_HEIGHT / 2.0;
                 self.score = 0;
                 self.level = 1;
                 self.player_lost = false;
                 self.start_level();
-            } else {
-                self.shoot();
             }
-        }
-
-        if self.player_lost || self.enemies.is_empty() {
             return;
         }
 
@@ -430,6 +445,18 @@ impl EventHandler<GameError> for MainState {
                     self.player_x += PLAYER_SPEED;
                 }
             }
+            KeyCode::H => {
+                self.shoot_left();
+            }
+            KeyCode::J => {
+                self.shoot_down();
+            }
+            KeyCode::K => {
+                self.shoot_up();
+            }
+            KeyCode::L => {
+                self.shoot_right();
+            }
             KeyCode::Escape => {
                 self.handle_menu(ctx);
             }
@@ -445,6 +472,7 @@ impl EventHandler<GameError> for MainState {
             _ => {}
         }
     }
+
 }
 
 struct Coin {
