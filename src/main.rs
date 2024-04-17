@@ -405,22 +405,20 @@ impl EventHandler<GameError> for MainState {
         _keymods: event::KeyMods,
         _repeat: bool,
     ) {
-        if self.menu_active {
-            if keycode == KeyCode::Space {
+        if keycode == KeyCode::Space {
+            if self.menu_active {
                 self.handle_menu(ctx);
-            }
-            return;
-        }
-
-        if self.player_lost || self.enemies.is_empty() {
-            if keycode == KeyCode::Space {
+            } else if self.player_lost || self.enemies.is_empty() {
                 self.player_x = WINDOW_WIDTH / 2.0;
                 self.player_y = WINDOW_HEIGHT / 2.0;
                 self.score = 0;
                 self.level = 1;
                 self.player_lost = false;
                 self.start_level();
-            }
+            } 
+        }
+
+        if self.player_lost || self.enemies.is_empty() {
             return;
         }
 
@@ -472,6 +470,7 @@ impl EventHandler<GameError> for MainState {
             _ => {}
         }
     }
+
 
 }
 
