@@ -5,7 +5,7 @@ use ggez::{
     Context, GameResult,
 };
 use rand::{thread_rng, Rng};
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 const WINDOW_WIDTH: f32 = 800.0;
 const WINDOW_HEIGHT: f32 = 600.0;
@@ -18,6 +18,9 @@ const PLAYER_SPEED: f32 = 5.0;
 const ENEMY_SPEED: f32 = 2.5;
 const COIN_SPAWN_INTERVAL: f32 = 5.0;
 const SHOP_ITEM_COST: i32 = 100;
+const BOMB_SIZE: f32 = 5.0;
+const BOMB_EXPLOSION_SIZE: f32 = 50.0;
+const BOMB_BULLET_COST: i32 = 5;
 
 struct MainState {
     player_x: f32,
@@ -25,6 +28,7 @@ struct MainState {
     enemies: Vec<(f32, f32, Instant)>,
     bullets: Vec<(f32, f32, f32, f32)>,
     coins: Vec<Coin>,
+    bombs: Vec<(f32, f32, Instant)>,
     score: i32,
     level: i32,
     player_lost: bool,
@@ -32,6 +36,7 @@ struct MainState {
     bullets_limit: i32,
     bullets_on_screen: i32,
     last_coin_spawn_time: Instant,
+    bomb_active: bool,
 }
 
 impl MainState {
@@ -42,6 +47,7 @@ impl MainState {
             enemies: vec![],
             bullets: vec![],
             coins: vec![],
+            bombs: vec![],
             score: 0,
             level: 0,
             player_lost: false,
@@ -49,6 +55,7 @@ impl MainState {
             bullets_limit: 0,
             bullets_on_screen: 0,
             last_coin_spawn_time: Instant::now(),
+            bomb_active: false,
         }
     }
 
@@ -136,8 +143,7 @@ impl MainState {
         for (bullet_idx, (bullet_x, bullet_y, _, _)) in self.bullets.iter().enumerate() {
             let bullet_rect = graphics::Rect::new(*bullet_x, *bullet_y, BULLET_SIZE, BULLET_SIZE);
             for (enemy_idx, (enemy_x, enemy_y, _)) in self.enemies.iter().enumerate() {
-                let enemy_rect =
-                    graphics::Rect::new(*enemy_x, *enemy_y, ENEMY_SIZE, ENEMY_SIZE);
+                let enemy_rect = graphics::Rect::new(*enemy_x, *enemy_y, ENEMY_SIZE, ENEMY_SIZE);
                 if bullet_rect.overlaps(&enemy_rect) {
                     bullets_to_remove.push(bullet_idx);
                     enemies_to_remove.push(enemy_idx);
@@ -253,6 +259,44 @@ impl MainState {
             }
         }
     }
+
+    fn spawn_bomb(&mut self) {
+        if self.bomb_active || self.bullets_limit < BOMB_BULLET_COST {
+            return;
+        }
+
+        let bomb_x = self.player_x + PLAYER_SIZE / 2.0 - BOMB_SIZE / 2.0;
+        let bomb_y = self.player_y + PLAYER_SIZE / 2.0 - BOMB_SIZE / 2.0;
+        self.bombs.push((bomb_x, bomb_y, Instant::now()));
+        self.bullets_limit -= BOMB_BULLET_COST;
+        self.bomb_active = true;
+    }
+
+    fn explode_bomb(&mut self) {
+        if !self.bomb_active {
+            return;
+        }
+
+        let bomb_x = self.player_x + PLAYER_SIZE / 2.0 - BOMB_SIZE / 2.0;
+        let bomb_y = self.player_y + PLAYER_SIZE / 2.0 - BOMB_SIZE / 2.0;
+
+        let mut enemies_to_remove = Vec::new();
+        for (enemy_idx, (enemy_x, enemy_y, _)) in self.enemies.iter().enumerate() {
+            let enemy_distance = ((enemy_x - bomb_x).powi(2) + (enemy_y - bomb_y).powi(2)).sqrt();
+            if enemy_distance <= BOMB_EXPLOSION_SIZE {
+                enemies_to_remove.push(enemy_idx);
+            }
+        }
+
+        for idx in enemies_to_remove.into_iter().rev() {
+            if idx < self.enemies.len() {
+                self.enemies.remove(idx);
+                self.score += 1;
+            }
+        }
+
+        self.bomb_active = false;
+    }
 }
 
 impl EventHandler<GameError> for MainState {
@@ -266,6 +310,7 @@ impl EventHandler<GameError> for MainState {
         self.detect_collisions();
         self.update_coins();
         self.handle_coin_collisions();
+        self.explode_bomb();
 
         if self.detect_player_enemy_collision() {
             self.handle_loss(ctx);
@@ -415,7 +460,7 @@ impl EventHandler<GameError> for MainState {
                 self.level = 1;
                 self.player_lost = false;
                 self.start_level();
-            } 
+            }
         }
 
         if self.player_lost || self.enemies.is_empty() {
@@ -467,11 +512,12 @@ impl EventHandler<GameError> for MainState {
             KeyCode::Key3 => {
                 self.buy_shop_item(ShopItem::ScoreBoost);
             }
+            KeyCode::B => {
+                self.spawn_bomb();
+            }
             _ => {}
         }
     }
-
-
 }
 
 struct Coin {
