@@ -5,7 +5,8 @@ use ggez::{
     Context, GameResult,
 };
 use rand::{thread_rng, Rng};
-use std::time::{Duration, Instant};
+use std::time::Instant;
+
 
 const WINDOW_WIDTH: f32 = 800.0;
 const WINDOW_HEIGHT: f32 = 600.0;
@@ -423,6 +424,9 @@ impl EventHandler<GameError> for MainState {
                 self.score = 0;
                 self.level = 1;
                 self.player_lost = false;
+                self.coins.clear();
+                self.bullets.clear();
+                self.enemies.clear();
                 self.start_level();
             } 
         }
@@ -476,6 +480,9 @@ impl EventHandler<GameError> for MainState {
             KeyCode::Key3 => {
                 self.buy_shop_item(ShopItem::ScoreBoost);
             }
+            KeyCode::Q => {
+                std::process::exit(0);
+            }
             _ => {}
         }
     }
@@ -512,7 +519,7 @@ enum ShopItem {
 fn main() -> GameResult {
     let (ctx, event_loop) = ggez::ContextBuilder::new("my_game", "telmo-sousa")
         .window_setup(ggez::conf::WindowSetup::default().title("My Game"))
-        .window_mode(ggez::conf::WindowMode::default().dimensions(WINDOW_WIDTH, WINDOW_HEIGHT))
+        .window_mode(ggez::conf::WindowMode::default().fullscreen_type(ggez::conf::FullscreenType::Desktop).borderless(true))
         .build()?;
     let state = MainState::new();
     event::run(ctx, event_loop, state)
