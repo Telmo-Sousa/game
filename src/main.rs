@@ -155,7 +155,6 @@ impl MainState {
             }
         }
 
-        // Remove enemies first
         for idx in enemies_to_remove.into_iter().rev() {
             if idx < self.enemies.len() {
                 self.enemies.remove(idx);
@@ -163,7 +162,6 @@ impl MainState {
             }
         }
 
-        // Remove bullets
         for idx in bullets_to_remove.into_iter().rev() {
             if idx < self.bullets.len() {
                 self.bullets.remove(idx);
