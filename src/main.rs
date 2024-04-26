@@ -7,7 +7,6 @@ use ggez::{
 use rand::{thread_rng, Rng};
 use std::time::Instant;
 
-
 const WINDOW_WIDTH: f32 = 800.0;
 const WINDOW_HEIGHT: f32 = 600.0;
 const PLAYER_SIZE: f32 = 10.0;
@@ -19,6 +18,9 @@ const PLAYER_SPEED: f32 = 5.0;
 const ENEMY_SPEED: f32 = 2.5;
 const COIN_SPAWN_INTERVAL: f32 = 5.0;
 const SHOP_ITEM_COST: i32 = 100;
+const MAX_BULLETS_ON_SCREEN: i32 = 5;
+const MAX_ENEMIES_PER_LEVEL_FACTOR: i32 = 10;
+const COIN_SCORE: i32 = 5;
 
 struct MainState {
     player_x: f32,
@@ -55,18 +57,18 @@ impl MainState {
 
     fn start_level(&mut self) {
         self.enemies.clear();
-        let enemies_count = 10 * self.level;
+        let enemies_count = MAX_ENEMIES_PER_LEVEL_FACTOR * self.level;
         for _ in 0..enemies_count {
             self.spawn_enemy();
         }
         self.bullets_limit = enemies_count + 10;
     }
 
-   fn spawn_enemy(&mut self) {
+    fn spawn_enemy(&mut self) {
         let mut rng = thread_rng();
-        
+
         let safe_radius = 100.0;
-        
+
         let mut x = rng.gen_range(0.0..WINDOW_WIDTH - ENEMY_SIZE);
         let mut y = rng.gen_range(0.0..WINDOW_HEIGHT - ENEMY_SIZE);
 
@@ -97,7 +99,7 @@ impl MainState {
     }
 
     fn shoot(&mut self, dx: f32, dy: f32) {
-        if self.bullets_limit > 0 && self.bullets_on_screen < 5 {
+        if self.bullets_limit > 0 && self.bullets_on_screen < MAX_BULLETS_ON_SCREEN {
             let bullet_x = self.player_x + PLAYER_SIZE / 2.0 - BULLET_SIZE / 2.0;
             let bullet_y = self.player_y + PLAYER_SIZE / 2.0 - BULLET_SIZE / 2.0;
             self.bullets.push((bullet_x, bullet_y, dx, dy));
@@ -146,8 +148,7 @@ impl MainState {
         for (bullet_idx, (bullet_x, bullet_y, _, _)) in self.bullets.iter().enumerate() {
             let bullet_rect = graphics::Rect::new(*bullet_x, *bullet_y, BULLET_SIZE, BULLET_SIZE);
             for (enemy_idx, (enemy_x, enemy_y, _)) in self.enemies.iter().enumerate() {
-                let enemy_rect =
-                    graphics::Rect::new(*enemy_x, *enemy_y, ENEMY_SIZE, ENEMY_SIZE);
+                let enemy_rect = graphics::Rect::new(*enemy_x, *enemy_y, ENEMY_SIZE, ENEMY_SIZE);
                 if bullet_rect.overlaps(&enemy_rect) {
                     bullets_to_remove.push(bullet_idx);
                     enemies_to_remove.push(enemy_idx);
@@ -182,11 +183,11 @@ impl MainState {
         false
     }
 
-    fn handle_loss(&mut self, ctx: &mut Context) {
+    fn handle_loss(&mut self, _ctx: &mut Context) {
         self.player_lost = true;
     }
 
-    fn handle_menu(&mut self, ctx: &mut Context) {
+    fn handle_menu(&mut self, _ctx: &mut Context) {
         self.menu_active = !self.menu_active;
     }
 
@@ -222,7 +223,7 @@ impl MainState {
             let player_rect =
                 graphics::Rect::new(self.player_x, self.player_y, PLAYER_SIZE, PLAYER_SIZE);
             if coin_rect.overlaps(&player_rect) {
-                self.score += 500;
+                self.score += COIN_SCORE;
                 coins_to_remove.push(i);
             }
         }
@@ -425,8 +426,9 @@ impl EventHandler<GameError> for MainState {
                 self.coins.clear();
                 self.bullets.clear();
                 self.enemies.clear();
+                self.bullets_on_screen = 0;
                 self.start_level();
-            } 
+            }
         }
 
         if self.player_lost || self.enemies.is_empty() {
@@ -484,8 +486,6 @@ impl EventHandler<GameError> for MainState {
             _ => {}
         }
     }
-
-
 }
 
 struct Coin {
@@ -517,7 +517,11 @@ enum ShopItem {
 fn main() -> GameResult {
     let (ctx, event_loop) = ggez::ContextBuilder::new("my_game", "telmo-sousa")
         .window_setup(ggez::conf::WindowSetup::default().title("My Game"))
-        .window_mode(ggez::conf::WindowMode::default().fullscreen_type(ggez::conf::FullscreenType::Desktop).borderless(true))
+        .window_mode(
+            ggez::conf::WindowMode::default()
+                .fullscreen_type(ggez::conf::FullscreenType::Desktop)
+                .borderless(true),
+        )
         .build()?;
     let state = MainState::new();
     event::run(ctx, event_loop, state)
