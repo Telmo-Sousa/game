@@ -35,6 +35,7 @@ struct MainState {
     bullets_limit: i32,
     bullets_on_screen: i32,
     last_coin_spawn_time: Instant,
+    keys_pressed: Vec<KeyCode>,
 }
 
 impl MainState {
@@ -52,6 +53,7 @@ impl MainState {
             bullets_limit: 0,
             bullets_on_screen: 0,
             last_coin_spawn_time: Instant::now(),
+            keys_pressed: Vec::new(),
         }
     }
 
@@ -486,6 +488,21 @@ impl EventHandler<GameError> for MainState {
             _ => {}
         }
     }
+
+    fn key_up_event(
+        &mut self,
+        _ctx: &mut Context,
+        keycode: KeyCode,
+        _keymods: event::KeyMods,
+    ) {
+        match keycode {
+            KeyCode::W | KeyCode::A | KeyCode::S | KeyCode::D => {}
+            KeyCode::H | KeyCode::J | KeyCode::K | KeyCode::L => {
+                // Do nothing on key release for shooting controls
+            }
+            _ => {}
+        }
+    }
 }
 
 struct Coin {
@@ -515,14 +532,21 @@ enum ShopItem {
 }
 
 fn main() -> GameResult {
-    let (ctx, event_loop) = ggez::ContextBuilder::new("my_game", "telmo-sousa")
+    let (ctx, event_loop) = match ggez::ContextBuilder::new("my_game", "telmo-sousa")
         .window_setup(ggez::conf::WindowSetup::default().title("My Game"))
         .window_mode(
             ggez::conf::WindowMode::default()
                 .fullscreen_type(ggez::conf::FullscreenType::Desktop)
                 .borderless(true),
         )
-        .build()?;
+        .build()
+    {
+        Ok(result) => result,
+        Err(error) => {
+            eprintln!("Error occurred during context creation: {}", error);
+            return Err(error);
+        }
+    };
     let state = MainState::new();
     event::run(ctx, event_loop, state)
 }
