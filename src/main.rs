@@ -62,7 +62,9 @@ impl MainState {
     }
 
     fn start_level(&mut self) {
+        self.bullets.clear();
         self.enemies.clear();
+        self.bullets_on_screen = 0;
         let enemies_count = MAX_ENEMIES_PER_LEVEL_FACTOR * self.level;
         for _ in 0..enemies_count {
             self.spawn_enemy();
