@@ -35,7 +35,6 @@ struct MainState {
     bullets_limit: i32,
     bullets_on_screen: i32,
     last_coin_spawn_time: Instant,
-    keys_pressed: Vec<KeyCode>,
 }
 
 impl MainState {
@@ -53,7 +52,6 @@ impl MainState {
             bullets_limit: 0,
             bullets_on_screen: 0,
             last_coin_spawn_time: Instant::now(),
-            keys_pressed: Vec::new(),
         }
     }
 
@@ -484,21 +482,6 @@ impl EventHandler<GameError> for MainState {
             }
             KeyCode::Q => {
                 std::process::exit(0);
-            }
-            _ => {}
-        }
-    }
-
-    fn key_up_event(
-        &mut self,
-        _ctx: &mut Context,
-        keycode: KeyCode,
-        _keymods: event::KeyMods,
-    ) {
-        match keycode {
-            KeyCode::W | KeyCode::A | KeyCode::S | KeyCode::D => {}
-            KeyCode::H | KeyCode::J | KeyCode::K | KeyCode::L => {
-                // Do nothing on key release for shooting controls
             }
             _ => {}
         }
