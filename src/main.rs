@@ -535,14 +535,21 @@ enum ShopItem {
 }
 
 fn main() -> GameResult {
-    let (ctx, event_loop) = ggez::ContextBuilder::new("my_game", "telmo-sousa")
+    let (ctx, event_loop) = match ggez::ContextBuilder::new("my_game", "telmo-sousa")
         .window_setup(ggez::conf::WindowSetup::default().title("My Game"))
         .window_mode(
             ggez::conf::WindowMode::default()
                 .fullscreen_type(ggez::conf::FullscreenType::Desktop)
                 .borderless(true),
         )
-        .build()?;
+        .build()
+    {
+        Ok(result) => result,
+        Err(error) => {
+            eprintln!("Error occurred during context creation: {}", error);
+            return Err(error);
+        }
+    };
     let state = MainState::new();
     event::run(ctx, event_loop, state)
 }
