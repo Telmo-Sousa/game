@@ -35,6 +35,9 @@ struct MainState {
     bullets_limit: i32,
     bullets_on_screen: i32,
     last_coin_spawn_time: Instant,
+    fps: u32,
+    frame_count: u32,
+    last_fps_update: Instant,
 }
 
 impl MainState {
@@ -52,6 +55,9 @@ impl MainState {
             bullets_limit: 0,
             bullets_on_screen: 0,
             last_coin_spawn_time: Instant::now(),
+            fps: 0,
+            frame_count: 0,
+            last_fps_update: Instant::now(),
         }
     }
 
@@ -285,6 +291,15 @@ impl EventHandler<GameError> for MainState {
             self.start_level();
         }
 
+        // update fps counter
+        self.frame_count += 1;
+        let elapsed = self.last_fps_update.elapsed().as_secs_f32();
+        if elapsed >= 1.0 {
+            self.fps = (self.frame_count as f32 / elapsed) as u32;
+            self.frame_count = 0;
+            self.last_fps_update = Instant::now();
+        }
+
         Ok(())
     }
 
@@ -403,6 +418,11 @@ impl EventHandler<GameError> for MainState {
             graphics::draw(ctx, &won_text, (won_position, 0.0, Color::WHITE))?;
         }
 
+        // Draw FPS
+        let fps_text = Text::new(format!("FPS: {}", self.fps));
+        let fps_position = [10.0, 10.0];
+        graphics::draw(ctx, &fps_text, (fps_position, 0.0, Color::WHITE))?;
+
         graphics::present(ctx)?;
         Ok(())
     }
@@ -515,21 +535,14 @@ enum ShopItem {
 }
 
 fn main() -> GameResult {
-    let (ctx, event_loop) = match ggez::ContextBuilder::new("my_game", "telmo-sousa")
+    let (ctx, event_loop) = ggez::ContextBuilder::new("my_game", "telmo-sousa")
         .window_setup(ggez::conf::WindowSetup::default().title("My Game"))
         .window_mode(
             ggez::conf::WindowMode::default()
                 .fullscreen_type(ggez::conf::FullscreenType::Desktop)
                 .borderless(true),
         )
-        .build()
-    {
-        Ok(result) => result,
-        Err(error) => {
-            eprintln!("Error occurred during context creation: {}", error);
-            return Err(error);
-        }
-    };
+        .build()?;
     let state = MainState::new();
     event::run(ctx, event_loop, state)
 }
