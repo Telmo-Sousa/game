@@ -1,5 +1,6 @@
 use ggez::error::GameError;
 use ggez::graphics::{self, Color, DrawMode, DrawParam, Mesh, Text};
+use ggez::mint;
 use ggez::{
     event::{self, EventHandler, KeyCode},
     Context, GameResult,
@@ -14,8 +15,8 @@ const ENEMY_SIZE: f32 = 10.0;
 const BULLET_SIZE: f32 = 5.0;
 const COIN_SIZE: f32 = 10.0;
 const BULLET_SPEED: f32 = 0.5;
-const PLAYER_SPEED: f32 = 5.0;
-const ENEMY_SPEED: f32 = 2.5;
+const PLAYER_SPEED: f32 = 6.0;
+const ENEMY_SPEED: f32 = 0.1;
 const COIN_SPAWN_INTERVAL: f32 = 5.0;
 const SHOP_ITEM_COST: i32 = 100;
 const MAX_BULLETS_ON_SCREEN: i32 = 5;
@@ -75,7 +76,7 @@ impl MainState {
     fn spawn_enemy(&mut self) {
         let mut rng = thread_rng();
 
-        let safe_radius = 100.0;
+        let safe_radius = 200.0;
 
         let mut x = rng.gen_range(0.0..WINDOW_WIDTH - ENEMY_SIZE);
         let mut y = rng.gen_range(0.0..WINDOW_HEIGHT - ENEMY_SIZE);
@@ -88,20 +89,23 @@ impl MainState {
         self.enemies.push((x, y, Instant::now()));
     }
 
+    // Adjust the move_enemies function to smoothly interpolate enemy movement
     fn move_enemies(&mut self) {
         for enemy in &mut self.enemies {
-            if enemy.2.elapsed().as_secs_f32() >= 0.1 {
-                if enemy.0 < self.player_x {
-                    enemy.0 += ENEMY_SPEED;
-                } else if enemy.0 > self.player_x {
-                    enemy.0 -= ENEMY_SPEED;
-                }
-                if enemy.1 < self.player_y {
-                    enemy.1 += ENEMY_SPEED;
-                } else if enemy.1 > self.player_y {
-                    enemy.1 -= ENEMY_SPEED;
-                }
-                enemy.2 = Instant::now();
+            let dx = self.player_x - enemy.0;
+            let dy = self.player_y - enemy.1;
+            let distance = (dx * dx + dy * dy).sqrt();
+            if distance > ENEMY_SPEED {
+                // Normalize the direction vector
+                let dir_x = dx / distance;
+                let dir_y = dy / distance;
+                // Move the enemy towards the player using interpolation
+                enemy.0 += dir_x * ENEMY_SPEED;
+                enemy.1 += dir_y * ENEMY_SPEED;
+            } else {
+                // Enemy is close enough to the player, no need to move further
+                enemy.0 = self.player_x;
+                enemy.1 = self.player_y;
             }
         }
     }
@@ -372,10 +376,16 @@ impl EventHandler<GameError> for MainState {
         }
 
         for coin in &self.coins {
-            let coin_mesh = Mesh::new_rectangle(
+            let coin_radius = COIN_SIZE / 2.0; // Calculate the radius based on the coin size
+            let coin_mesh = Mesh::new_circle(
                 ctx,
                 DrawMode::fill(),
-                graphics::Rect::new(coin.x, coin.y, COIN_SIZE, COIN_SIZE),
+                mint::Point2 {
+                    x: coin.x + coin_radius,
+                    y: coin.y + coin_radius,
+                }, // Center of the circle
+                coin_radius,
+                0.1, // Number of segments (adjust as needed for smoothness)
                 Color::YELLOW,
             )?;
             graphics::draw(ctx, &coin_mesh, DrawParam::default())?;
