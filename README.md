@@ -46,7 +46,7 @@ Just move and shoot :)
     git clone https://github.com/Telmo-Sousa/game.git
     cd game
     ```
-3. Run the project:
+3. Run the game:
     ```bash
     cargo run --release
     ```
