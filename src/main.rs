@@ -1,11 +1,11 @@
 use ggez::error::GameError;
 use ggez::graphics::{self, Color, DrawMode, DrawParam, Mesh, Text};
-use ggez::mint;
 use ggez::{
     event::{self, EventHandler, KeyCode},
     Context, GameResult,
 };
 use rand::{thread_rng, Rng};
+use std::collections::HashSet;
 use std::time::Instant;
 
 const WINDOW_WIDTH: f32 = 800.0;
@@ -14,9 +14,9 @@ const PLAYER_SIZE: f32 = 10.0;
 const ENEMY_SIZE: f32 = 10.0;
 const BULLET_SIZE: f32 = 5.0;
 const COIN_SIZE: f32 = 10.0;
-const BULLET_SPEED: f32 = 0.5;
-const PLAYER_SPEED: f32 = 6.0;
-const ENEMY_SPEED: f32 = 0.1;
+const BULLET_SPEED: f32 = 1.5;
+const PLAYER_SPEED: f32 = 1.5;
+const ENEMY_SPEED: f32 = 1.0;
 const COIN_SPAWN_INTERVAL: f32 = 5.0;
 const SHOP_ITEM_COST: i32 = 100;
 const MAX_BULLETS_ON_SCREEN: i32 = 5;
@@ -39,6 +39,7 @@ struct MainState {
     fps: u32,
     frame_count: u32,
     last_fps_update: Instant,
+    keys_pressed: HashSet<KeyCode>,
 }
 
 impl MainState {
@@ -59,7 +60,17 @@ impl MainState {
             fps: 0,
             frame_count: 0,
             last_fps_update: Instant::now(),
+            keys_pressed: HashSet::new(),
         }
+    }
+
+    fn move_player(&mut self, dx: f32, dy: f32) {
+        self.player_x += dx * PLAYER_SPEED;
+        self.player_y += dy * PLAYER_SPEED;
+
+        // Ensure the player stays within the window bounds
+        self.player_x = self.player_x.clamp(0.0, WINDOW_WIDTH - PLAYER_SIZE);
+        self.player_y = self.player_y.clamp(0.0, WINDOW_HEIGHT - PLAYER_SIZE);
     }
 
     fn start_level(&mut self) {
@@ -76,7 +87,7 @@ impl MainState {
     fn spawn_enemy(&mut self) {
         let mut rng = thread_rng();
 
-        let safe_radius = 200.0;
+        let safe_radius = 100.0;
 
         let mut x = rng.gen_range(0.0..WINDOW_WIDTH - ENEMY_SIZE);
         let mut y = rng.gen_range(0.0..WINDOW_HEIGHT - ENEMY_SIZE);
@@ -89,7 +100,6 @@ impl MainState {
         self.enemies.push((x, y, Instant::now()));
     }
 
-    // Adjust the move_enemies function to smoothly interpolate enemy movement
     fn move_enemies(&mut self) {
         for enemy in &mut self.enemies {
             let dx = self.player_x - enemy.0;
@@ -282,6 +292,35 @@ impl EventHandler<GameError> for MainState {
             return Ok(());
         }
 
+        // Process player movement based on currently pressed keys
+        if !self.player_lost && !self.enemies.is_empty() {
+            let mut dx = 0.0;
+            let mut dy = 0.0;
+
+            if self.keys_pressed.contains(&KeyCode::W) {
+                dy -= 1.0;
+            }
+            if self.keys_pressed.contains(&KeyCode::S) {
+                dy += 1.0;
+            }
+            if self.keys_pressed.contains(&KeyCode::A) {
+                dx -= 1.0;
+            }
+            if self.keys_pressed.contains(&KeyCode::D) {
+                dx += 1.0;
+            }
+
+            // Normalize diagonal movement
+            // Normalize diagonal movement
+            if dx != 0.0 && dy != 0.0 {
+                let diag = ((dx * dx + dy * dy) as f32).sqrt();
+                dx /= diag;
+                dy /= diag;
+            }
+
+            self.move_player(dx, dy);
+        }
+
         self.move_enemies();
         self.update_bullets();
         self.detect_collisions();
@@ -376,16 +415,10 @@ impl EventHandler<GameError> for MainState {
         }
 
         for coin in &self.coins {
-            let coin_radius = COIN_SIZE / 2.0; // Calculate the radius based on the coin size
-            let coin_mesh = Mesh::new_circle(
+            let coin_mesh = Mesh::new_rectangle(
                 ctx,
                 DrawMode::fill(),
-                mint::Point2 {
-                    x: coin.x + coin_radius,
-                    y: coin.y + coin_radius,
-                }, // Center of the circle
-                coin_radius,
-                0.1, // Number of segments (adjust as needed for smoothness)
+                graphics::Rect::new(coin.x, coin.y, COIN_SIZE, COIN_SIZE),
                 Color::YELLOW,
             )?;
             graphics::draw(ctx, &coin_mesh, DrawParam::default())?;
@@ -446,6 +479,9 @@ impl EventHandler<GameError> for MainState {
         _keymods: event::KeyMods,
         _repeat: bool,
     ) {
+        // Add the key to pressed keys
+        self.keys_pressed.insert(keycode);
+
         if keycode == KeyCode::Space {
             if self.menu_active {
                 self.handle_menu(ctx);
@@ -467,27 +503,8 @@ impl EventHandler<GameError> for MainState {
             return;
         }
 
+        // Handle non-movement keys
         match keycode {
-            KeyCode::W => {
-                if self.player_y > 0.0 {
-                    self.player_y -= PLAYER_SPEED;
-                }
-            }
-            KeyCode::A => {
-                if self.player_x > 0.0 {
-                    self.player_x -= PLAYER_SPEED;
-                }
-            }
-            KeyCode::S => {
-                if self.player_y < WINDOW_HEIGHT - PLAYER_SIZE {
-                    self.player_y += PLAYER_SPEED;
-                }
-            }
-            KeyCode::D => {
-                if self.player_x < WINDOW_WIDTH - PLAYER_SIZE {
-                    self.player_x += PLAYER_SPEED;
-                }
-            }
             KeyCode::H => {
                 self.shoot_left();
             }
@@ -517,6 +534,11 @@ impl EventHandler<GameError> for MainState {
             }
             _ => {}
         }
+    }
+
+    // Add key_up_event to remove released keys
+    fn key_up_event(&mut self, _ctx: &mut Context, keycode: KeyCode, _keymods: event::KeyMods) {
+        self.keys_pressed.remove(&keycode);
     }
 }
 
